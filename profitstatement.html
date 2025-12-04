@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weekly Statement (Team Sync)</title>
+    <!-- Screen Capture Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    
+    <!-- Firebase Libraries -->
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js" type="module"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js" type="module"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js" type="module"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
+
+        :root {
+            --dark-blue: #183050;
+            --header-red: #a33232;
+            --total-green: #00994d;
+            --light-bg: #f5f5f5;
+            --border-color: #444;
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #e0e0e0;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Controls UI */
+        .controls {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 1000;
+            background: rgba(255,255,255,0.9);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            width: 180px;
+        }
+        
+        .btn {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            font-size: 12px;
+            transition: transform 0.1s;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn:active { transform: scale(0.98); }
+
+        .btn-save { background-color: #2196F3; color: white; }
+        .btn-jpg { background-color: #FF9800; color: white; }
+        .btn-png { background-color: #9C27B0; color: white; }
+        .btn-clear { background-color: #f44336; color: white; justify-content: center;}
+        
+        .btn-group {
+            display: flex;
+            gap: 5px;
+            justify-content: flex-end;
+            margin-bottom: 10px;
+        }
+        .btn-add { background-color: #4CAF50; color: white; padding: 4px 10px; font-size: 11px; width: auto; text-align: center; justify-content: center;}
+        .btn-remove { background-color: #e53935; color: white; padding: 4px 10px; font-size: 11px; width: auto; text-align: center; justify-content: center;}
+
+        .status-bar {
+            font-size: 11px;
+            text-align: center;
+            margin-bottom: 5px;
+            padding: 4px;
+            border-radius: 4px;
+        }
+        .status-saved { background-color: #d4edda; color: #155724; }
+        .status-unsaved { background-color: #fff3cd; color: #856404; }
+        .status-local { background-color: #e2e3e5; color: #383d41; }
+
+        .sheet-container {
+            background: white;
+            width: 297mm; /* A4 Landscape width */
+            min-height: 210mm;
+            padding: 20px 30px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            box-sizing: border-box;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+            margin-bottom: 5px;
+            table-layout: fixed;
+        }
+
+        th, td {
+            border: 1px solid var(--border-color);
+            padding: 2px 4px;
+            text-align: center;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+
+        input {
+            width: 100%;
+            border: none;
+            background: transparent;
+            font-family: inherit;
+            font-size: inherit;
+            text-align: center;
+            outline: none;
+            padding: 2px 0;
+        }
+        
+        input:focus { background-color: #e8f0fe; }
+        input.number { text-align: right; }
+        input.text-left { text-align: left; }
+
+        /* Styles used in the sheet */
+        .header-blue { background-color: var(--dark-blue); color: white; font-weight: bold; }
+        .header-red { background-color: var(--header-red); color: white; font-weight: bold; padding: 6px; }
+        .header-yellow { background-color: #ffff00; color: black; font-weight: bold; }
+        .header-green { background-color: var(--total-green); color: white; font-weight: bold; }
+
+        .section-title {
+            background-color: var(--dark-blue);
+            color: white;
+            text-align: center;
+            font-weight: bold;
+            padding: 4px;
+            text-transform: uppercase;
+            border: 1px solid var(--border-color);
+            margin-top: 10px;
+            font-size: 11px;
+        }
+
+        .sub-title th {
+            background-color: #dbe5f1;
+            font-weight: bold;
+            color: black;
+            vertical-align: middle;
+        }
+
+        .total-row td {
+            background-color: #b8cce4;
+            font-weight: bold;
+            color: black;
+        }
+
+        .text-left { text-align: left !important; padding-left: 5px; }
+        .text-right { text-align: right !important; padding-right: 5px; }
+        .bg-grey { background-color: #f2f2f2; }
+        
+        /* Column Widths */
+        .col-date { width: 70px; }
+        .col-miles { width: 60px; }
+        .col-money { width: 80px; }
+        
+        /* Loading Overlay */
+        #loading {
+            display: none;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.8);
+            z-index: 2000;
+            justify-content: center; align-items: center;
+            flex-direction: column;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3; border-top: 4px solid #3498db;
+            border-radius: 50%; width: 30px; height: 30px;
+            animation: spin 1s linear infinite; margin-bottom: 10px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+    <div id="loading">
+        <div class="spinner"></div>
+        <div id="loadingText">Processing...</div>
+    </div>
+
+    <div class="controls">
+        <div id="dbStatus" class="status-bar status-unsaved">Checking...</div>
+        <button class="btn btn-save" onclick="saveToCloud()">💾 Save Data</button>
+        <button class="btn btn-jpg" onclick="downloadJPG()">📷 JPG Image</button>
+        <button class="btn btn-png" onclick="downloadPNG()">🖼️ PNG Image</button>
+        <div style="height: 1px; background: #ccc; margin: 5px 0;"></div>
+        <button class="btn btn-clear" onclick="clearData()">❌ Clear All</button>
+    </div>
+
+    <!-- MAIN SHEET -->
+    <div class="sheet-container" id="printableArea">
+        
+        <!-- Header -->
+        <table style="border: none; margin-bottom: 5px;">
+            <tr style="background-color: var(--dark-blue); color: white; height: 35px;">
+                <td style="text-align: left; width: 60%; padding-left: 10px; border:none; vertical-align: middle;">
+                    <div style="font-size: 12px; font-weight: bold;">COMPANY NAME: <input type="text" id="companyName" value="Registan Express Inc" style="width: 200px; display:inline; color:white; border-bottom:1px solid white; text-align:left;"></div>
+                </td>
+                <td style="text-align: right; width: 40%; padding-right: 10px; border:none; vertical-align: middle;">
+                    REF. No: <input type="text" id="refNo" value="001" style="width: 40px; display: inline; text-align: center; color: white; border-bottom: 1px solid white;">
+                </td>
+            </tr>
+        </table>
+
+        <div class="header-red" style="text-align: center; margin-bottom: 5px; font-size: 12px;">
+            INDEPENDENT CONTRACTOR'S WEEKLY STATEMENT
+        </div>
+
+        <!-- Employee Info -->
+        <table style="margin-bottom: 5px;">
+            <tr>
+                <td colspan="5" style="border:none;"></td>
+                <td class="bg-grey" style="width: 80px;"><input type="text" id="year" value="2025"></td>
+                <td class="header-yellow" style="width: 80px;"><input type="text" id="weekNo" value="47"></td>
+            </tr>
+            <tr class="header-blue">
+                <td class="text-left" style="width: 12%;">EMPLOYEE'S NAME:</td>
+                <td style="background: white; color: black;"><input type="text" id="empName" value="ACCOUNTING DEPARTMENT" style="font-weight: bold;"></td>
+                <td style="background: white; color: red; width: 40px;"><input type="text" id="empCode" value="ACC" style="color: red; font-weight: bold;"></td>
+                <td class="text-right" style="width: 12%;">PAYROLL PERIOD:</td>
+                <td style="background: white; color: black; width: 100px;"><input type="text" id="payStart" value="11/16/2025"></td>
+                <td style="background: white; color: black; width: 100px;"><input type="text" id="payEnd" value="11/22/2025"></td>
+                <td style="width: 10px;"></td>
+            </tr>
+        </table>
+
+        <table style="margin-bottom: 10px;">
+            <tr class="header-blue">
+                <td style="width: 80px;">BANK ACC:</td>
+                <td style="background: #e0e0e0; color: black;"><input type="text" id="bankAcc" value="**** 4321"></td>
+                <td style="width: 80px;">FUEL CARD:</td>
+                <td style="background: #e0e0e0; color: black;"><input type="text" id="fuelCard" value="3456"></td>
+                <td style="width: 50px;">UNIT:</td>
+                <td style="background: #e0e0e0; color: black;"><input type="text" id="unitNo" value="101"></td>
+                <td style="width: 100px;">DRIVER STATUS</td>
+                <td style="background: #e0e0e0; color: black;"><input type="text" id="driverStatus" value="ACTIVE"></td>
+            </tr>
+            <tr>
+                <td colspan="6" style="border: none;"></td>
+                <td colspan="2" class="header-yellow"><input type="text" id="dispatcher" value="RASHAAD JONES" style="font-weight: bold;"></td>
+            </tr>
+        </table>
+
+        <!-- LOAD SECTION -->
+        <div class="section-title">LOAD AND GROSS INFORMATIONS</div>
+        <table id="loadTable">
+            <colgroup>
+                <col style="width: 10%"> 
+                <col style="width: 10%"> 
+                <col style="width: 8%"> 
+                <col style="width: 18%"> 
+                <col class="col-date">   
+                <col style="width: 18%"> 
+                <col class="col-miles">  
+                <col class="col-date">   
+                <col class="col-money">  
+            </colgroup>
+            <thead>
+                <tr class="sub-title">
+                    <th rowspan="2">AGENT NAME</th>
+                    <th rowspan="2">BROKER</th>
+                    <th rowspan="2">TRIP ID</th>
+                    <th>PICK UP LOCATION</th>
+                    <th>PICK UP</th>
+                    <th>DROP OFF LOCATION</th>
+                    <th rowspan="2">TOTAL MILES</th>
+                    <th rowspan="2">DROP OFF DATE</th>
+                    <th rowspan="2">LOAD RATE</th>
+                </tr>
+                <tr class="sub-title">
+                    <th>City and State</th>
+                    <th>DATE</th>
+                    <th>City and State</th>
+                </tr>
+            </thead>
+            <tbody id="loadBody">
+                <!-- Rows generated by JS -->
+            </tbody>
+            <tfoot>
+                <tr class="total-row">
+                    <td colspan="6" class="text-right">TOTAL GROSS / MILES</td>
+                    <td class="text-right" id="totalMiles">0</td>
+                    <td></td>
+                    <td class="text-right">$<span id="totalGross">0.00</span></td>
+                </tr>
+            </tfoot>
+        </table>
+        <div class="btn-group">
+            <button class="btn btn-remove" onclick="removeRow('loadBody')">- Remove</button>
+            <button class="btn btn-add" onclick="addRow('loadBody')">+ Add Load</button>
+        </div>
+
+        <!-- RATE CONFIG -->
+        <div style="background-color: #ffffcc; border: 1px solid #ccc; padding: 5px; text-align: right; margin-bottom: 10px; font-size: 11px;">
+            <b>CALCULATION SETTINGS (DRIVER SALARY):</b> 
+            Rate Per Mile: $ <input type="number" id="ratePerMile" value="0.65" style="width: 50px; font-weight: bold; border-bottom: 1px solid black;" onchange="calculate()">
+            <span id="calcLabel" style="color: red; margin-left: 10px;">(Driver Pay = $0.00)</span>
+        </div>
+
+        <!-- FUEL SECTION -->
+        <div class="section-title">FUEL EXPENSES</div>
+        <table id="fuelTable">
+            <colgroup>
+                <col style="width: 5%">
+                <col style="width: 15%">
+                <col style="width: 25%">
+                <col style="width: 10%">
+                <col style="width: 10%">
+                <col style="width: 10%">
+                <col style="width: 10%">
+                <col style="width: 15%">
+            </colgroup>
+            <thead>
+                <tr class="sub-title">
+                    <th>No</th>
+                    <th>DATE</th>
+                    <th>GAS STATION<br><span style="font-size:9px; font-weight:normal;">City and State</span></th>
+                    <th>QUANTITY</th>
+                    <th>UNIT PRICE</th>
+                    <th>DISCOUNT</th>
+                    <th>ITEM TYPE</th>
+                    <th>TOTAL</th>
+                </tr>
+            </thead>
+            <tbody id="fuelBody">
+                <!-- Rows generated by JS -->
+            </tbody>
+            <tfoot>
+                <tr class="total-row">
+                    <td colspan="7" class="text-right">TOTAL FUEL EXPENSES</td>
+                    <td class="text-right">$<span id="totalFuel">0.00</span></td>
+                </tr>
+            </tfoot>
+        </table>
+        <div class="btn-group">
+            <button class="btn btn-remove" onclick="removeRow('fuelBody')">- Remove</button>
+            <button class="btn btn-add" onclick="addFuelRow()">+ Add Fuel</button>
+        </div>
+
+        <!-- MARGIN SECTION -->
+        <div class="header-red" style="display: flex; justify-content: space-between; padding: 6px 10px; margin-bottom: 5px;">
+            <span id="marginLabel">GROSS MARGIN (Gross Load - Driver Salary - Fuel)</span>
+            <span>$<span id="marginValue">0.00</span></span>
+        </div>
+
+        <!-- DEDUCTIONS SECTION -->
+        <div class="section-title">PAYROLL DEDUCTIONS</div>
+        <table id="deductionTable">
+            <colgroup>
+                <col style="width: 5%">
+                <col style="width: 30%">
+                <col style="width: 30%">
+                <col style="width: 10%">
+                <col style="width: 10%">
+                <col style="width: 15%">
+            </colgroup>
+            <thead>
+                <tr class="sub-title">
+                    <th>№</th>
+                    <th>TYPE OF DEDUCTIONS</th>
+                    <th>COMMENTS</th>
+                    <th>RATE %</th>
+                    <th>AMOUNT</th>
+                    <th>TOTAL</th>
+                </tr>
+            </thead>
+            <tbody id="deductionBody">
+                <!-- Rows generated by JS -->
+            </tbody>
+            <tfoot>
+                <tr class="total-row">
+                    <td colspan="5" class="text-right">TOTAL DEDUCTIONS</td>
+                    <td class="text-right">$<span id="totalDeductions">0.00</span></td>
+                </tr>
+            </tfoot>
+        </table>
+        <div class="btn-group">
+            <button class="btn btn-remove" onclick="removeRow('deductionBody')">- Remove</button>
+            <button class="btn btn-add" onclick="addDeductionRow()">+ Add Deduction</button>
+        </div>
+
+        <!-- PROFIT SECTION -->
+        <div class="header-red" style="display: flex; justify-content: space-between; padding: 6px 10px; margin-bottom: 5px;">
+            <span>COMPANY PROFIT (After Driver Pay & Expenses)</span>
+            <span style="font-size: 14px;">$<span id="profitValue">0.00</span></span>
+        </div>
+
+        <!-- FINAL BALANCE -->
+        <table style="width: 50%; margin-left: auto; border: 1px solid black;">
+            <tr style="background-color: #b8cce4;">
+                <td class="text-right" style="font-weight: bold; width: 60%;">REMAINING BALANCE</td>
+                <td class="text-right" style="font-weight: bold;">$ <input type="number" id="remainingBalance" value="2500.00" class="number" style="width: 80px; display:inline; font-weight: bold;" onchange="calculate()"></td>
+            </tr>
+            <tr class="header-green">
+                <td class="text-right">FINAL AMOUNT</td>
+                <td class="text-right">$ <span id="finalAmount">0.00</span></td>
+            </tr>
+            <tr style="background-color: var(--dark-blue); color: white;">
+                <td class="text-right" style="font-weight: bold;">PAID</td>
+                <td class="text-right" style="font-weight: bold; color:white;">$ <input type="number" id="paidAmount" value="1500.00" class="number" style="width: 80px; display:inline; color: white; font-weight: bold;" onchange="calculate()"></td>
+            </tr>
+            <tr class="header-red">
+                <td class="text-right">FINAL BALANCE</td>
+                <td class="text-right">$ <span id="finalBalance">0.00</span></td>
+            </tr>
+        </table>
+
+    </div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
+        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
+        import { getFirestore, doc, setDoc, onSnapshot, collection } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+
+        let currentUser = null;
+        let isSaving = false;
+        let isLocalMode = false;
+
+        const CUSTOM_FIREBASE_CONFIG = null; 
+        const CUSTOM_APP_ID = 'my-team-app'; 
+
+        // --- INIT LOGIC ---
+        let app, auth, db, appId;
+
+        async function initApp() {
+            try {
+                let config;
+                if (typeof __firebase_config !== 'undefined') {
+                    config = JSON.parse(__firebase_config);
+                    appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                } 
+                else if (CUSTOM_FIREBASE_CONFIG) {
+                    config = CUSTOM_FIREBASE_CONFIG;
+                    appId = CUSTOM_APP_ID;
+                } 
+                else {
+                    throw new Error("No Configuration Found");
+                }
+
+                app = initializeApp(config);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                onAuthStateChanged(auth, (user) => {
+                    currentUser = user;
+                    if (user) {
+                        updateStatus("Synced Team", true);
+                        startListening();
+                    }
+                });
+
+            } catch (error) {
+                console.warn("Firebase Init Failed (Running Locally):", error);
+                enableLocalMode();
+            }
+        }
+
+        function enableLocalMode() {
+            isLocalMode = true;
+            updateStatus("Local Mode (Offline)", false);
+            const el = document.getElementById('dbStatus');
+            el.className = 'status-bar status-local';
+            
+            const localData = localStorage.getItem('weekly_statement_data');
+            if(localData) {
+                loadDataFromSnapshot(JSON.parse(localData));
+            }
+        }
+
+        function updateStatus(msg, isSuccess) {
+            const el = document.getElementById('dbStatus');
+            el.innerText = msg;
+            if(!isLocalMode) {
+                el.className = 'status-bar ' + (isSuccess ? 'status-saved' : 'status-unsaved');
+            }
+        }
+
+        const COLLECTION_NAME = 'statements';
+        const DOC_ID = 'team_weekly_sheet_v1';
+        
+        function getDocRef() {
+            return doc(db, 'artifacts', appId, 'public', 'data', COLLECTION_NAME, DOC_ID);
+        }
+
+        function startListening() {
+            if (!currentUser || isLocalMode) return;
+            
+            onSnapshot(getDocRef(), (docSnap) => {
+                if (docSnap.exists() && !isSaving) {
+                    loadDataFromSnapshot(docSnap.data());
+                    updateStatus("Synced with Team", true);
+                }
+            }, (error) => {
+                console.error("Sync Error:", error);
+                updateStatus("Sync Error", false);
+            });
+        }
+
+        window.saveToCloud = async function() {
+            updateStatus("Saving...", false);
+            isSaving = true;
+            const data = gatherData();
+
+            if (isLocalMode) {
+                try {
+                    localStorage.setItem('weekly_statement_data', JSON.stringify(data));
+                    updateStatus("Saved Locally", true);
+                    document.getElementById('dbStatus').className = 'status-bar status-local';
+                    setTimeout(() => { 
+                        updateStatus("Local Mode (Offline)", false); 
+                        document.getElementById('dbStatus').className = 'status-bar status-local';
+                        isSaving = false; 
+                    }, 1000);
+                } catch(e) {
+                    alert("Local Save Failed: " + e.message);
+                    isSaving = false;
+                }
+                return;
+            }
+
+            if (!currentUser) {
+                alert("Not connected to database.");
+                isSaving = false;
+                return;
+            }
+            
+            try {
+                await setDoc(getDocRef(), data);
+                updateStatus("Saved to Cloud", true);
+                setTimeout(() => isSaving = false, 1000);
+            } catch (e) {
+                console.error("Save Error", e);
+                updateStatus("Save Failed", false);
+                isSaving = false;
+            }
+        };
+
+        function gatherData() {
+            const data = {
+                companyName: document.getElementById('companyName').value,
+                refNo: document.getElementById('refNo').value,
+                year: document.getElementById('year').value,
+                weekNo: document.getElementById('weekNo').value,
+                empName: document.getElementById('empName').value,
+                empCode: document.getElementById('empCode').value,
+                payStart: document.getElementById('payStart').value,
+                payEnd: document.getElementById('payEnd').value,
+                bankAcc: document.getElementById('bankAcc').value,
+                fuelCard: document.getElementById('fuelCard').value,
+                unitNo: document.getElementById('unitNo').value,
+                driverStatus: document.getElementById('driverStatus').value,
+                dispatcher: document.getElementById('dispatcher').value,
+                ratePerMile: document.getElementById('ratePerMile').value,
+                remainingBalance: document.getElementById('remainingBalance').value,
+                paidAmount: document.getElementById('paidAmount').value,
+                feePercent: document.getElementById('feePercent')?.value || 0
+            };
+
+            data.loads = getTableData('loadBody', (row) => ({
+                col1: row.children[0].querySelector('input')?.value || '',
+                col2: row.children[1].querySelector('input')?.value || '',
+                col3: row.children[2].querySelector('input')?.value || '',
+                col4: row.children[3].querySelector('input')?.value || '',
+                col5: row.children[4].querySelector('input')?.value || '',
+                col6: row.children[5].querySelector('input')?.value || '',
+                miles: row.querySelector('.miles-input')?.value || '0',
+                col8: row.children[7].querySelector('input')?.value || '',
+                rate: row.querySelector('.rate-input')?.value || '0',
+            }));
+
+            data.fuels = getTableData('fuelBody', (row) => ({
+                date: row.children[1].querySelector('input')?.value || '',
+                station: row.children[2].querySelector('input')?.value || '',
+                qty: row.querySelector('.fuel-qty')?.value || '0',
+                price: row.querySelector('.fuel-price')?.value || '0',
+                disc: row.querySelector('.fuel-disc')?.value || '0',
+                item: row.children[6].querySelector('input')?.value || '',
+            }));
+            
+            data.deductions = getTableData('deductionBody', (row) => ({
+                type: row.children[1].querySelector('input')?.value || row.children[1].innerText.trim(),
+                comment: row.children[2].querySelector('input')?.value || '',
+                percent: row.children[3].querySelector('input')?.value || '',
+                amount: row.querySelector('.deduction-amount')?.value || '0',
+                isFixed: !row.children[1].querySelector('input')
+            }));
+
+            return data;
+        }
+
+        function getTableData(bodyId, extractFn) {
+            const rows = document.querySelectorAll(`#${bodyId} tr`);
+            return Array.from(rows).map(extractFn);
+        }
+
+        function loadDataFromSnapshot(data) {
+            if (!data) return;
+
+            setVal('companyName', data.companyName);
+            setVal('refNo', data.refNo);
+            setVal('year', data.year);
+            setVal('weekNo', data.weekNo);
+            setVal('empName', data.empName);
+            setVal('empCode', data.empCode);
+            setVal('payStart', data.payStart);
+            setVal('payEnd', data.payEnd);
+            setVal('bankAcc', data.bankAcc);
+            setVal('fuelCard', data.fuelCard);
+            setVal('unitNo', data.unitNo);
+            setVal('driverStatus', data.driverStatus);
+            setVal('dispatcher', data.dispatcher);
+            setVal('ratePerMile', data.ratePerMile);
+            setVal('remainingBalance', data.remainingBalance);
+            setVal('paidAmount', data.paidAmount);
+
+            const loadBody = document.getElementById('loadBody');
+            loadBody.innerHTML = '';
+            (data.loads || []).forEach(d => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><input type="text" value="${d.col1}"></td>
+                    <td><input type="text" value="${d.col2}"></td>
+                    <td><input type="text" value="${d.col3}"></td>
+                    <td><input type="text" value="${d.col4}"></td>
+                    <td><input type="text" value="${d.col5}"></td>
+                    <td><input type="text" value="${d.col6}"></td>
+                    <td><input type="number" class="miles-input number" value="${d.miles}" onchange="calculate()"></td>
+                    <td><input type="text" value="${d.col8}"></td>
+                    <td><input type="number" class="rate-input number" value="${d.rate}" onchange="calculate()"></td>
+                `;
+                loadBody.appendChild(tr);
+            });
+
+            const fuelBody = document.getElementById('fuelBody');
+            fuelBody.innerHTML = '';
+            (data.fuels || []).forEach((d, i) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${i+1}</td>
+                    <td><input type="text" value="${d.date}" placeholder="YYYY-MM-DD"></td>
+                    <td><input type="text" value="${d.station}"></td>
+                    <td><input type="number" class="fuel-qty number" value="${d.qty}" onchange="calculate()"></td>
+                    <td><input type="number" class="fuel-price number" value="${d.price}" onchange="calculate()"></td>
+                    <td><input type="number" class="fuel-disc number" value="${d.disc}" onchange="calculate()"></td>
+                    <td><input type="text" value="${d.item}"></td>
+                    <td class="text-right" style="font-weight:bold;">$<span class="fuel-total">0.00</span></td>
+                `;
+                fuelBody.appendChild(tr);
+            });
+
+            const dedBody = document.getElementById('deductionBody');
+            dedBody.innerHTML = '';
+            (data.deductions || []).forEach((d, i) => {
+                const tr = document.createElement('tr');
+                let typeHtml = d.isFixed ? d.type : `<input type="text" class="text-left" value="${d.type}">`;
+                if(i===0 && d.type === 'COMPANY FEE') typeHtml = `<td class="text-left">COMPANY FEE</td>`; 
+                else if(!d.isFixed) typeHtml = `<td class="text-left"><input type="text" value="${d.type}" class="text-left"></td>`;
+                else typeHtml = `<td class="text-left">${d.type}</td>`;
+
+                if (i === 0) {
+                     tr.innerHTML = `
+                        <td>1</td>
+                        <td class="text-left">COMPANY FEE</td>
+                        <td><input type="text" value="${d.comment}"></td>
+                        <td><input type="number" id="feePercent" value="${d.percent || data.feePercent || 0}" style="width:30px;" onchange="calculate()">%</td>
+                        <td></td>
+                        <td class="text-right">$<span id="companyFeeTotal">0.00</span></td>
+                    `;
+                } else {
+                    tr.innerHTML = `
+                        <td>${i+1}</td>
+                        ${typeHtml.includes('<td') ? typeHtml.replace('<td', '<td') : `<td class="text-left">${typeHtml}</td>`}
+                        <td><input type="text" value="${d.comment}"></td>
+                        <td></td>
+                        <td><input type="number" class="deduction-amount number" value="${d.amount}" onchange="calculate()"></td>
+                        <td class="text-right"><span style="opacity:0.5;">$</span><span class="deduction-display">0.00</span></td>
+                    `;
+                }
+                dedBody.appendChild(tr);
+            });
+
+            window.calculate();
+        }
+
+        function setVal(id, val) {
+            const el = document.getElementById(id);
+            if(el) el.value = val || '';
+        }
+
+        initApp();
+
+    </script>
+    <script>
+        // --- STANDARD JS LOGIC ---
+
+        function toggleLoading(show, text="Processing...") {
+            const el = document.getElementById('loading');
+            const txt = document.getElementById('loadingText');
+            el.style.display = show ? 'flex' : 'none';
+            txt.innerText = text;
+        }
+
+        // --- EXPORT FUNCTIONS ---
+        function getStaticClone(originalArea) {
+            const clone = originalArea.cloneNode(true);
+            clone.style.position = 'absolute'; clone.style.top = '0'; clone.style.left = '0'; clone.style.zIndex = '-1';
+            clone.style.width = '297mm'; clone.style.padding = '20px'; clone.style.backgroundColor = 'white';
+            
+            const btns = clone.querySelectorAll('.btn-group, button');
+            btns.forEach(b => b.remove());
+
+            const originalInputs = originalArea.querySelectorAll('input');
+            const cloneInputs = clone.querySelectorAll('input');
+            cloneInputs.forEach((cloneInput, index) => {
+                const originalInput = originalInputs[index];
+                const span = document.createElement('span');
+                span.innerText = originalInput.value;
+                
+                const style = window.getComputedStyle(originalInput);
+                span.style.color = style.color;
+                span.style.fontWeight = style.fontWeight;
+                span.style.textAlign = style.textAlign;
+                span.style.fontSize = style.fontSize;
+                span.style.fontFamily = style.fontFamily;
+                span.style.display = 'inline-block';
+                span.style.width = style.width;
+                span.style.minWidth = '20px';
+                if (originalInput.style.borderBottom && originalInput.style.borderBottom !== 'none') {
+                    span.style.borderBottom = originalInput.style.borderBottom;
+                }
+                cloneInput.parentNode.replaceChild(span, cloneInput);
+            });
+            return clone;
+        }
+
+        function downloadJPG() {
+            toggleLoading(true, "Generating JPG...");
+            const originalArea = document.getElementById("printableArea");
+            const clone = getStaticClone(originalArea);
+            document.body.appendChild(clone);
+
+            html2canvas(clone, { scale: 2, useCORS: true, backgroundColor: "#ffffff" })
+            .then(canvas => {
+                let link = document.createElement("a");
+                link.download = "profit_statement.jpg";
+                link.href = canvas.toDataURL("image/jpeg", 0.9);
+                link.click();
+                document.body.removeChild(clone);
+                toggleLoading(false);
+            });
+        }
+
+        function downloadPNG() {
+            toggleLoading(true, "Generating PNG...");
+            const originalArea = document.getElementById("printableArea");
+            const clone = getStaticClone(originalArea);
+            document.body.appendChild(clone);
+
+            html2canvas(clone, { scale: 2, useCORS: true, backgroundColor: "#ffffff" })
+            .then(canvas => {
+                let link = document.createElement("a");
+                link.download = "profit_statement.png";
+                link.href = canvas.toDataURL("image/png");
+                link.click();
+                document.body.removeChild(clone);
+                toggleLoading(false);
+            });
+        }
+
+        // --- CALC LOGIC ---
+        window.calculate = function() {
+            let totalGross = 0, totalMiles = 0;
+            document.querySelectorAll('.rate-input').forEach(i => totalGross += (parseFloat(i.value)||0));
+            document.querySelectorAll('.miles-input').forEach(i => totalMiles += (parseFloat(i.value)||0));
+            
+            document.getElementById('totalGross').innerText = formatCurrency(totalGross);
+            document.getElementById('totalMiles').innerText = totalMiles.toLocaleString();
+
+            const ratePerMile = parseFloat(document.getElementById('ratePerMile').value)||0;
+            const driverPay = totalMiles * ratePerMile;
+            document.getElementById('calcLabel').innerText = `(Driver Expense: ${totalMiles} mi × $${ratePerMile} = $${formatCurrency(driverPay)})`;
+
+            let totalFuel = 0;
+            document.querySelectorAll('#fuelBody tr').forEach(row => {
+                const qty = parseFloat(row.querySelector('.fuel-qty').value)||0;
+                const price = parseFloat(row.querySelector('.fuel-price').value)||0;
+                const disc = parseFloat(row.querySelector('.fuel-disc').value)||0;
+                let rowTotal = (qty * price) - disc;
+                if (rowTotal < 0) rowTotal = 0;
+                row.querySelector('.fuel-total').innerText = formatCurrency(rowTotal);
+                if(qty > 0 || price > 0) totalFuel += rowTotal;
+            });
+            document.getElementById('totalFuel').innerText = formatCurrency(totalFuel);
+
+            const grossMargin = totalGross - driverPay - totalFuel;
+            document.getElementById('marginValue').innerText = formatCurrency(grossMargin);
+
+            let totalDeductions = 0;
+            const feePercent = (parseFloat(document.getElementById('feePercent')?.value)||0) / 100;
+            const companyFee = totalGross * feePercent; 
+            
+            const feeEl = document.getElementById('companyFeeTotal');
+            if(feeEl) feeEl.innerText = formatCurrency(companyFee);
+            totalDeductions += companyFee;
+
+            document.querySelectorAll('.deduction-amount').forEach(inp => {
+                const rowVal = parseFloat(inp.value)||0;
+                const display = inp.parentElement.nextElementSibling.querySelector('.deduction-display');
+                if(display) display.innerText = formatCurrency(rowVal);
+                totalDeductions += rowVal;
+            });
+            document.getElementById('totalDeductions').innerText = formatCurrency(totalDeductions);
+
+            const profit = totalGross - driverPay - totalFuel - totalDeductions;
+            const profitEl = document.getElementById('profitValue');
+            profitEl.innerText = formatCurrency(profit);
+            profitEl.style.color = profit < 0 ? 'yellow' : 'white';
+
+            const remaining = parseFloat(document.getElementById('remainingBalance').value)||0;
+            const paid = parseFloat(document.getElementById('paidAmount').value)||0;
+            
+            const finalAmount = remaining + profit;
+            const finalBal = finalAmount - paid;
+            
+            document.getElementById('finalAmount').innerText = formatCurrency(finalAmount); 
+            document.getElementById('finalBalance').innerText = formatCurrency(finalBal);
+        };
+
+        window.formatCurrency = function(num) {
+            return parseFloat(num).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        };
+
+        // --- ROW MANAGEMENT ---
+        window.addRow = function(tbodyId) {
+            const tbody = document.getElementById(tbodyId);
+            const tr = document.createElement('tr');
+            if(tbodyId === 'loadBody') {
+                tr.innerHTML = `
+                    <td><input type="text"></td><td><input type="text"></td><td><input type="text"></td>
+                    <td><input type="text"></td><td><input type="text"></td><td><input type="text"></td>
+                    <td><input type="number" class="miles-input number" onchange="calculate()"></td>
+                    <td><input type="text"></td>
+                    <td><input type="number" class="rate-input number" onchange="calculate()"></td>`;
+            }
+            tbody.appendChild(tr);
+        };
+
+        window.addFuelRow = function() {
+            const tbody = document.getElementById('fuelBody');
+            const idx = tbody.children.length + 1;
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${idx}</td>
+                <td><input type="text" placeholder="YYYY-MM-DD"></td>
+                <td><input type="text"></td>
+                <td><input type="number" class="fuel-qty number" onchange="calculate()"></td>
+                <td><input type="number" class="fuel-price number" onchange="calculate()"></td>
+                <td><input type="number" class="fuel-disc number" value="0.00" onchange="calculate()"></td>
+                <td><input type="text"></td>
+                <td class="text-right" style="font-weight:bold;">$<span class="fuel-total">0.00</span></td>`;
+            tbody.appendChild(tr);
+        };
+
+        window.addDeductionRow = function() {
+            const tbody = document.getElementById('deductionBody');
+            const idx = tbody.children.length + 1;
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${idx}</td>
+                <td><input type="text" class="text-left"></td>
+                <td><input type="text"></td>
+                <td></td>
+                <td><input type="number" class="deduction-amount number" value="0.00" onchange="calculate()"></td>
+                <td class="text-right"><span style="opacity:0.5;">$</span><span class="deduction-display">0.00</span></td>`;
+            tbody.appendChild(tr);
+        };
+
+        window.removeRow = function(id) {
+            const tbody = document.getElementById(id);
+            if(tbody.children.length > 0) {
+                tbody.removeChild(tbody.lastElementChild);
+                window.calculate();
+            }
+        };
+
+        window.clearData = function() {
+            if(confirm("Clear local fields?")) {
+                document.querySelectorAll('input').forEach(i => i.value="");
+                window.calculate();
+            }
+        };
+
+        // Init default empty rows if empty
+        window.onload = function() {
+             // 1. LOADS
+             if(document.getElementById('loadBody').children.length === 0) {
+                 const lb = document.getElementById('loadBody');
+                 
+                 // Trip 1
+                 const r1 = document.createElement('tr');
+                 r1.innerHTML = `<td><input type="text" value="DAT"></td>
+                    <td><input type="text" value="CHRW"></td><td><input type="text" value="L001"></td>
+                    <td><input type="text" value="Portland, OR"></td><td><input type="text" value="11/18/2025"></td>
+                    <td><input type="text" value="Seattle, WA"></td>
+                    <td><input type="number" class="miles-input number" value="175" onchange="calculate()"></td>
+                    <td><input type="text" value="11/18/2025"></td>
+                    <td><input type="number" class="rate-input number" value="950.00" onchange="calculate()"></td>`;
+                 lb.appendChild(r1);
+
+                 // Trip 2
+                 const r2 = document.createElement('tr');
+                 r2.innerHTML = `<td><input type="text" value="DAT"></td>
+                    <td><input type="text" value="TQL"></td><td><input type="text" value="L002"></td>
+                    <td><input type="text" value="Seattle, WA"></td><td><input type="text" value="11/19/2025"></td>
+                    <td><input type="text" value="Sacramento, CA"></td>
+                    <td><input type="number" class="miles-input number" value="750" onchange="calculate()"></td>
+                    <td><input type="text" value="11/20/2025"></td>
+                    <td><input type="number" class="rate-input number" value="2100.00" onchange="calculate()"></td>`;
+                 lb.appendChild(r2);
+             }
+
+             // 2. FUEL
+             if(document.getElementById('fuelBody').children.length === 0) {
+                 const fb = document.getElementById('fuelBody');
+                 const fr1 = document.createElement('tr');
+                 fr1.innerHTML = `
+                    <td>1</td>
+                    <td><input type="text" value="2025-11-19" placeholder="YYYY-MM-DD"></td>
+                    <td><input type="text" value="Pilot - Tacoma, WA"></td>
+                    <td><input type="number" class="fuel-qty number" value="95.00" onchange="calculate()"></td>
+                    <td><input type="number" class="fuel-price number" value="4.550" onchange="calculate()"></td>
+                    <td><input type="number" class="fuel-disc number" value="25.00" onchange="calculate()"></td>
+                    <td><input type="text" value="ULSD"></td>
+                    <td class="text-right" style="font-weight:bold;">$<span class="fuel-total">0.00</span></td>`;
+                 fb.appendChild(fr1);
+             }
+
+             // 3. DEDUCTIONS
+             if(document.getElementById('deductionBody').children.length === 0) {
+                 const db = document.getElementById('deductionBody');
+                 
+                 // Row 1: Company Fee (Percentage based)
+                 const dr1 = document.createElement('tr');
+                 dr1.innerHTML = `
+                        <td>1</td>
+                        <td class="text-left">COMPANY FEE</td>
+                        <td><input type="text" value="Dispatch/Admin Fee"></td>
+                        <td><input type="number" id="feePercent" value="12" style="width:30px;" onchange="calculate()">%</td>
+                        <td></td>
+                        <td class="text-right">$<span id="companyFeeTotal">0.00</span></td>`;
+                 db.appendChild(dr1);
+
+                 // Row 2: Fixed Deduction
+                 const dr2 = document.createElement('tr');
+                 dr2.innerHTML = `
+                        <td>2</td>
+                        <td class="text-left"><input type="text" class="text-left" value="INSURANCE"></td>
+                        <td><input type="text" value="Weekly Premium"></td>
+                        <td></td>
+                        <td><input type="number" class="deduction-amount number" value="250.00" onchange="calculate()"></td>
+                        <td class="text-right"><span style="opacity:0.5;">$</span><span class="deduction-display">0.00</span></td>`;
+                 db.appendChild(dr2);
+             }
+             
+             // Run initial calculation
+             setTimeout(window.calculate, 500);
+        };
+    </script>
+</body>
+</html>
